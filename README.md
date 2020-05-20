@@ -99,20 +99,7 @@ The IP address and port number on your workstation obviously may be different. Y
 
 ### Modify the application
 
-Let’s make a simple change to the application and redeploy it. Open the file public/script.js in vi or your favorite editor. Modify the handleSubmission function so that it has an additional statement to append the date to the entry value, as shown below:
-
-javascript
-  var handleSubmission = function(e) {
-    e.preventDefault();
-    var entryValue = entryContentElement.val()
-    if (entryValue.length > 0) {
-      entryValue += " " + new Date();     // ADD THIS LINE
-      entriesElement.append("<p>...</p>");
-      $.getJSON("rpush/guestbook/" + entryValue, appendGuestbookEntries);
-      entryContentElement.val("")
-    }
-    return false;
-  }
+Let’s make a simple change to the application and redeploy it. Open the file public/script.js in vi or your favorite editor. Modify the handleSubmission function so that it has an additional statement to append the date to the entry value, ensure it is the same as the file (script.js) in the public folder.
   
   
 Now rebuild the docker image and assign it a new tag:
@@ -125,3 +112,98 @@ After the image is built, we need to tell Kubernetes to use the new image:
 $ kubectl set image deployment/guestbook guestbook=guestbook:v1.1
 
 Refresh the guestbook application in your browser. (You may have to reload the page to get the updated javascript file.) Try entering something in the form and clicking “Submit.” You should see the text that you entered, followed by the current time appear on the page.
+
+
+### 3. Set up a remote single-node cluster using the IBM Cloud Kubernetes Service
+
+Now look at continuing our application development on IBM Cloud. If you have not already registered for an IBM Cloud account, do so here. The steps in this section can be done with a free Lite account. (The cluster that you create expires after one month.)
+
+Log in to the IBM Cloud CLI and enter your IBM Cloud credentials:
+
+$ ibmcloud login
+
+##### Note: If you have a federated ID, use ibmcloud login --sso to log in to the IBM Cloud CLI.
+
+#### Create a cluster
+
+Create a Kubernetes cluster:
+$ ibmcloud ks cluster-create --name mycluster
+
+Cluster creation continues in the background. You can check the status:
+$ ibmcloud ks clusters
+
+If the cluster state is pending, wait for a moment and try the command again. Once the cluster is provisioned (i.e., state is normal), the Kubernetes client CLI kubectl needs to be configured to talk to the provisioned cluster.
+
+Run ibmcloud ks cluster-config mycluster, which creates a config file on your workstation:
+$ ibmcloud ks cluster-config mycluster
+
+Copy the export statement and run it. It sets the KUBECONFIG environment variable to point to the kubectl config file and makes your kubectl client work with your new Kubernetes cluster.
+
+You can verify that by entering a kubectl command:
+$ kubectl get nodes
+
+
+#### Deploy the application to your remote cluster
+
+In order for Kubernetes to pull images to run in the cluster, the images need to be stored in an accessible registry. You can use the IBM Cloud Kubernetes Service to push Docker images to your own private registry.
+
+First add a namespace to create your own image repository. (A namespace is a unique name to identify your private image registry.)
+
+Replace <my_namespace> with your preferred namespace.
+
+$ ibmcloud cr namespace-add <my_namespace>
+
+
+The created registry name has the format registry.<region>.bluemix.net/<your_namespace> where <region> depends upon the region where your IBM Cloud account was created. You can find this out by running the ibmcloud cr region command.
+
+$ ibmcloud cr region
+
+Before you can push an image into the registry, you need to run the ibmcloud cr login command to log your local Docker daemon into the IBM Cloud Container Registry.
+
+$ ibmcloud cr login
+
+You can now tag our current local image (which you built previously while deploying to minikube) to associate it with the private registry and push it to the registry. Be sure to substitute <region> and <my_namespace> with the proper values.
+
+$ docker tag guestbook:v1.1 registry.<region>.bluemix.net/<my_namespace>/guestbook:v1.1
+$ docker push registry.<region>.bluemix.net/<my_namespace>/guestbook:v1.1
+
+To run the application, use the same kubectl run command as before, except now refer to the image in the private repository:
+
+$ kubectl run guestbook --image=registry.<region>.bluemix.net/<my_namespace>/guestbook:v1
+
+You can use kubectl to verify that Kubernetes created a pod containing our container and that it’s running:
+
+$ kubectl get pods
+
+
+#### Accessing the running application
+
+The guestbook application listens on port 3000 inside the pod. To make the application externally accessible, you need to create a Kubernetes service of type NodePort for it. Kubernetes allocates a port in the range 30000-32767 and the node proxies that port to the pod’s target port.
+
+$ kubectl expose deployment guestbook --type=NodePort --port=3000
+
+To access the service, you need to know the public IP address of the node where the application is running and the node port number that Kubernetes assigned to the service.
+
+Get the IP address:
+$ ibmcloud ks workers mycluster
+
+Get the node port number:
+$ kubectl describe services/guestbook
+
+The application can be accessed from a browser by using the URL http://IPAddress:NodePortNumber/
+
+### Scale the number of pods
+
+Of course, the reason for having a cluster is to increase capacity and improve availability by placing copies of an application on multiple nodes. Kubernetes calls these copies “replicas.”
+
+Now tell Kubernetes that we want two replicas of the application:
+$ kubectl scale --replicas=2 deployment guestbook
+
+Kubernetes works in the background to start an additional pod to make the total number of pods equal to 2.
+
+You can check the status of this by running the kubectl get deployments command:
+$ kubectl get deployments
+
+You can also see the status of the pods and which nodes they are running on:
+$ kubectl get pods -o wide
+
