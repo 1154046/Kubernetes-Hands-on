@@ -1,6 +1,9 @@
-# Kubernetes-Hands-on
+# Kubernetes Local and Remote Cluster Provisioning Workshop
 This is a hands on lab which demonstrates the usage of Kubernetes clusters in a local and remote environment
 
+Quick Kick off with remote and local clusters which is the subset of the original code pattern which can be found here: https://developer.ibm.com/tutorials/developing-a-kubernetes-application-with-local-and-remote-clusters/
+
+Additional hands on tutorial for remote clusters can be found here: https://docker-ibm.gitbook.io/kube/ 
 
 As a developer, you want to rapidly iterate on your application source code locally while still mirroring a remote production environment as closely as possible. 
 
@@ -9,13 +12,12 @@ This tutorial describes how you can set up a single-node Kubernetes cluster loca
 Finally, you learn to set up a multi-node cluster locally by using kubeadm-dind-cluster and remotely with IBM Cloud Kubernetes Service.
 
 In this tutorial, you learn how to perform the following tasks:
-
-    Create a local single-node cluster using Minikube.
-    Create a local multi-node cluster using kubeadm-dind-cluster.
-    Create remote single-node and multi-node clusters using IBM Cloud Kubernetes Service.
-    Make images available to your local and remote clusters.
-    Access your running application in your local and remote clusters.
-    Modify and re-deploy your application.
+    
+    1. Create a local single-node cluster using Minikube.
+    2. Create remote single-node and multi-node clusters using IBM Cloud Kubernetes Service.
+    3. Make images available to your local and remote clusters.
+    4. Access your running application in your local and remote clusters.
+    5. Modify and re-deploy your application.
 
 ## Prerequisites
 
@@ -25,14 +27,22 @@ IBM provides an installer here to get all of these tools together. There are ins
 
 The following tools are used in this tutorial:
 
-    git: git is a version control system that we’ll use to obtain the source of a sample application.
-    Docker: Docker is a tool that allows developers to build and run an application as a lightweight, portable container.
-    kubectl CLI: kubectl is a command line interface for running commands against Kubernetes clusters.
-    ibmcloud CLI: ibmcloud is a command line interface for managing resources in IBM Cloud.
+    1. git: git is a version control system that we’ll use to obtain the source of a sample application.
+    https://git-scm.com/downloads
+    
+    2. Docker: Docker is a tool that allows developers to build and run an application as a lightweight, portable container.
+    https://www.docker.com/products/docker-desktop
+    
+    
+    3. kubectl CLI: kubectl is a command line interface for running commands against Kubernetes clusters.
+    https://kubernetes.io/docs/tasks/tools/install-kubectl/
 
+    4. ibmcloud CLI: ibmcloud is a command line interface for managing resources in IBM Cloud.
+    https://clis.ng.bluemix.net/ui/home.html
+    
 ## Estimated time
 
-Completing this tutorial should take approximately 90 minutes.
+Completing this tutorial should take approximately 60 - 90 minutes.
 
 
 ## Steps
@@ -42,7 +52,12 @@ Completing this tutorial should take approximately 90 minutes.
 The application that we use in this tutorial is a simple guestbook website where users can post messages. 
 You should clone it to your workstation since you’ll be building it locally.
 
+
 $ git clone https://github.com/IBM/guestbook
+
+
+For the purposes of this tutorial, the application is run without a backing database (i.e., data is stored in-memory).
+
 
 ### 2.  Set up a local single-node cluster using Minikube
 
@@ -56,10 +71,16 @@ Use the minikube start command to start a cluster. It creates a virtual machine 
 
 Rename the minikube downloaded exe to minikube.exe, then either use the minikube.exe in your directory or add a minikube PATH in your environment variables.
 
-run $ minikube start in your terminal. 
+run this command in your terminal to start the cluster:
+
+$ minikube start
+
 
 ##### Minikube configures the kubectl CLI to work with this cluster. 
-You can verify by entering a kubectl command, like this: $ kubectl get nodes
+You can verify by entering a kubectl command, like this: 
+
+$ kubectl get nodes
+
 
 #### Deploy the application to your local cluster
 
@@ -69,11 +90,16 @@ $ eval $(minikube docker-env)
 
 If you now enter docker ps you will see all of the containers running inside minikube.
 
+
 ##### Note: The effect of the eval command is limited to the current command window. If you close and re-open the window then you will need to repeat this command.
 
+
 Let’s go ahead and build the guestbook application: 
+
 $ cd guestbook/v1/guestbook
+
 $ docker build -t guestbook:v1 .
+
 
 Note that the image was given the tag v1. You should not use the latest tag, because this will make Kubernetes try to pull the image from a public registry. We want it to use the locally stored image.
 
@@ -82,6 +108,7 @@ $ kubectl run guestbook --image=guestbook:v1
 
 We can use kubectl to verify that Kubernetes created a pod containing our container and that it’s running:
 $ kubectl get pods
+
 
 #### Access the running application
 
@@ -93,6 +120,7 @@ $ kubectl expose deployment guestbook --type=NodePort --port=3000
 In order to access the service, we need to know the IP address of Minikube’s virtual machine and the node port number. Minikube provides a convenient way for getting this information.
 
 $ minikube service guestbook --url
+
 
 The IP address and port number on your workstation obviously may be different. You can copy and paste the url that you get into your browser and the guestbook application should appear. You can also leave off the --url option and minikube will open your default browser with the url for you.
 
@@ -147,63 +175,5 @@ $ kubectl get nodes
 
 In order for Kubernetes to pull images to run in the cluster, the images need to be stored in an accessible registry. You can use the IBM Cloud Kubernetes Service to push Docker images to your own private registry.
 
-First add a namespace to create your own image repository. (A namespace is a unique name to identify your private image registry.)
-
-Replace <my_namespace> with your preferred namespace.
-
-$ ibmcloud cr namespace-add <my_namespace>
-
-
-The created registry name has the format registry.<region>.bluemix.net/<your_namespace> where <region> depends upon the region where your IBM Cloud account was created. You can find this out by running the ibmcloud cr region command.
-
-$ ibmcloud cr region
-
-Before you can push an image into the registry, you need to run the ibmcloud cr login command to log your local Docker daemon into the IBM Cloud Container Registry.
-
-$ ibmcloud cr login
-
-You can now tag our current local image (which you built previously while deploying to minikube) to associate it with the private registry and push it to the registry. Be sure to substitute <region> and <my_namespace> with the proper values.
-
-$ docker tag guestbook:v1.1 registry.<region>.bluemix.net/<my_namespace>/guestbook:v1.1
-$ docker push registry.<region>.bluemix.net/<my_namespace>/guestbook:v1.1
-
-To run the application, use the same kubectl run command as before, except now refer to the image in the private repository:
-
-$ kubectl run guestbook --image=registry.<region>.bluemix.net/<my_namespace>/guestbook:v1
-
-You can use kubectl to verify that Kubernetes created a pod containing our container and that it’s running:
-
-$ kubectl get pods
-
-
-#### Accessing the running application
-
-The guestbook application listens on port 3000 inside the pod. To make the application externally accessible, you need to create a Kubernetes service of type NodePort for it. Kubernetes allocates a port in the range 30000-32767 and the node proxies that port to the pod’s target port.
-
-$ kubectl expose deployment guestbook --type=NodePort --port=3000
-
-To access the service, you need to know the public IP address of the node where the application is running and the node port number that Kubernetes assigned to the service.
-
-Get the IP address:
-$ ibmcloud ks workers mycluster
-
-Get the node port number:
-$ kubectl describe services/guestbook
-
-The application can be accessed from a browser by using the URL http://IPAddress:NodePortNumber/
-
-### Scale the number of pods
-
-Of course, the reason for having a cluster is to increase capacity and improve availability by placing copies of an application on multiple nodes. Kubernetes calls these copies “replicas.”
-
-Now tell Kubernetes that we want two replicas of the application:
-$ kubectl scale --replicas=2 deployment guestbook
-
-Kubernetes works in the background to start an additional pod to make the total number of pods equal to 2.
-
-You can check the status of this by running the kubectl get deployments command:
-$ kubectl get deployments
-
-You can also see the status of the pods and which nodes they are running on:
-$ kubectl get pods -o wide
+Please complete Setup, Lab 1 and Lab 2 here: https://docker-ibm.gitbook.io/kube/ 
 
